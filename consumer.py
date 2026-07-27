@@ -37,11 +37,24 @@ while True:
 
         func = FUNCS.get(func_name)
         if func is None:
-            result = f"ERROR: unknown func_name '{func_name}'"
+            status = "error"
+            result = f"unknown func_name '{func_name}'"
         else:
             result = func(*args)  # 按 func_name 找到函数，传入 args 执行
+            status = "success"
+
+        # 结果回写：Key=result:{task_id}，Value=JSON
+        r.set(f"result:{task_id}", json.dumps(
+            {"status": status, "data": result}, ensure_ascii=False))
 
         ts = datetime.datetime.now().strftime("%H:%M:%S")
-        print(f"[{ts}] task_id={task_id} | {func_name}{tuple(args)} = {result}", flush=True)
+        print(f"[{ts}] task_id={task_id} | {func_name}{tuple(args)} = {result} -> stored", flush=True)
     except Exception as e:
+        # 异常也回写，便于 API 端查询失败原因
+        try:
+            tid = json.loads(item.decode("utf-8")).get("task_id", "unknown")
+            r.set(f"result:{tid}", json.dumps(
+                {"status": "error", "data": str(e)}, ensure_ascii=False))
+        except Exception:
+            pass
         print(f"[ERROR] failed to process packet: {e} | raw={item}", flush=True)

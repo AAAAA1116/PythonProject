@@ -18,7 +18,28 @@ def parse_num(s):
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        qs = parse_qs(urlparse(self.path).query)
+        parsed = urlparse(self.path)
+        path = parsed.path
+        qs = parse_qs(parsed.query)
+
+        # 结果查询接口：/result?task_id=xxx
+        if path == "/result":
+            task_id = qs.get("task_id", [""])[0]
+            raw = r.get(f"result:{task_id}") if task_id else None
+            if raw is None:
+                body = json.dumps({"status": "pending", "data": None},
+                                  ensure_ascii=False)
+                code = 404
+            else:
+                body = raw.decode("utf-8")  # 已是 JSON 字符串
+                code = 200
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(body.encode("utf-8"))
+            return
+
+        # 任务提交接口：/?a=1&b=2&func=add
         func_name = qs.get("func", ["add"])[0]
         try:
             args = [parse_num(qs["a"][0]), parse_num(qs["b"][0])]
@@ -32,9 +53,9 @@ class Handler(BaseHTTPRequestHandler):
             "args": args,
         }
         r.lpush(QUEUE, json.dumps(packet, ensure_ascii=False))
-        body = f"Pushed task: {json.dumps(packet, ensure_ascii=False)}\n"
+        body = json.dumps(packet, ensure_ascii=False) + "\n"
         self.send_response(200)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Type", "application/json; charset=utf-8")
         self.end_headers()
         self.wfile.write(body.encode("utf-8"))
 
